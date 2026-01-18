@@ -36,14 +36,16 @@ ENV PYTHONUNBUFFERED=1 \
 # =============================================================================
 FROM base AS development
 
-# Copy project files if they exist (for rebuilds after init)
-# Using COPY with a wildcard allows this to work even if files don't exist
-COPY --chown=appuser:appuser pyproject.tom[l] uv.loc[k] ./
+# Copy dependency files and package metadata
+COPY --chown=appuser:appuser pyproject.toml uv.lock README.md ./
 
-# Install dependencies if lockfile exists, otherwise skip
-RUN if [ -f "uv.lock" ]; then uv sync --frozen --all-groups; fi
+# Copy source package structure (needed for editable install)
+COPY --chown=appuser:appuser src/ ./src/
 
-# Copy application code
+# Install all dependencies including dev
+RUN uv sync --frozen --all-groups
+
+# Copy remaining application files
 COPY --chown=appuser:appuser . .
 
 # Default command - shell for interactive development
