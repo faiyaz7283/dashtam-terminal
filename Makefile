@@ -1,132 +1,261 @@
-.PHONY: help docker-build docker-up docker-down docker-shell docker-run docker-cli \
-        docker-verify docker-sync install sync lint format test test-cov type-check verify clean
+.PHONY: help setup dev-up dev-down dev-logs dev-shell dev-restart dev-status dev-build dev-rebuild \
+        test lint format type-check verify clean check status-all ps
 
-# Default target
+# ==============================================================================
+# HELP
+# ==============================================================================
+
+.DEFAULT_GOAL := help
+
 help:
-	@echo "Dashtam Terminal - Development Commands"
+	@echo "🎯 Dashtam Terminal - TUI for Dashtam Financial Platform"
 	@echo ""
-	@echo "Docker Commands (run from host):"
-	@echo "  make docker-build    - Build development Docker image"
-	@echo "  make docker-up       - Start container (detached)"
-	@echo "  make docker-down     - Stop container"
-	@echo "  make docker-shell    - Shell into running container"
-	@echo "  make docker-run      - Run TUI (interactive)"
-	@echo "  make docker-cli      - Run CLI command (CMD=\"...\")"
-	@echo "  make docker-verify   - Run verification inside container"
-	@echo "  make docker-sync     - Sync dependencies inside container"
+	@echo "📋 Quick Start:"
+	@echo "  1. Start Traefik:     cd ~/docker-services/traefik && make up"
+	@echo "  2. Start dev:         make dev-up"
+	@echo "  3. Run TUI:           make dev-shell, then: dashtam"
 	@echo ""
-	@echo "Container Commands (run inside container):"
-	@echo "  make install         - Install all dependencies"
-	@echo "  make sync            - Sync dependencies with lock file"
-	@echo "  make format          - Format code (ruff format)"
-	@echo "  make lint            - Run linter (ruff check)"
-	@echo "  make type-check      - Run type checker (mypy)"
+	@echo "🚀 Development:"
+	@echo "  make dev-up          - Start development environment"
+	@echo "  make dev-down        - Stop development environment"
+	@echo "  make dev-logs        - View development logs (follow)"
+	@echo "  make dev-shell       - Shell into app container"
+	@echo "  make dev-restart     - Restart development environment"
+	@echo "  make dev-build       - Build development containers"
+	@echo "  make dev-rebuild     - Rebuild containers (no cache)"
+	@echo "  make dev-status      - Show service status"
+	@echo ""
+	@echo "🖥️  Running (inside container):"
+	@echo "  dashtam              - Launch TUI application"
+	@echo "  dashtam-cli          - Run CLI commands"
+	@echo "  dashtam-cli --help   - Show CLI help"
+	@echo ""
+	@echo "✨ Code Quality:"
+	@echo "  make lint            - Run linters (ruff)"
+	@echo "  make format          - Format code (ruff)"
+	@echo "  make type-check      - Type check with mypy"
 	@echo "  make test            - Run tests"
-	@echo "  make test-cov        - Run tests with coverage report"
-	@echo "  make verify          - Run full verification"
-	@echo "  make clean           - Remove build artifacts"
+	@echo "  make verify          - 🔥 FULL verification (format, lint, type-check, test)"
+	@echo ""
+	@echo "🔧 Utilities:"
+	@echo "  make setup           - First-time setup (idempotent)"
+	@echo "  make check           - Verify Traefik is running"
+	@echo "  make status-all      - Show all environment status"
+	@echo "  make ps              - Show all Dashtam Terminal containers"
+	@echo "  make clean           - Stop and clean environment"
 
-# =============================================================================
-# Docker Commands (run from host machine)
-# =============================================================================
+# ==============================================================================
+# SETUP
+# ==============================================================================
 
-# Build development image
-docker-build:
-	docker compose -f compose/docker-compose.dev.yml build
+setup:
+	@echo "🚀 Dashtam Terminal First-Time Setup"
+	@echo ""
+	@echo "📝 Step 1: Creating env/.env.dev from template..."
+	@if [ -f env/.env.dev ]; then \
+		echo "  ℹ️  env/.env.dev already exists - skipping"; \
+	else \
+		cp env/.env.example env/.env.dev; \
+		echo "  ✅ Created env/.env.dev"; \
+	fi
+	@echo ""
+	@echo "🔍 Step 2: Checking Traefik..."
+	@$(MAKE) _check-traefik-verbose || true
+	@echo ""
+	@echo "✅ Setup complete!"
+	@echo ""
+	@echo "📝 Next steps:"
+	@echo "  1. Start Traefik (if not running):"
+	@echo "     cd ~/docker-services/traefik && make up"
+	@echo ""
+	@echo "  2. Start development environment:"
+	@echo "     make dev-up"
 
-# Start container (detached)
-docker-up:
-	docker compose -f compose/docker-compose.dev.yml up -d
+# ==============================================================================
+# DEVELOPMENT ENVIRONMENT
+# ==============================================================================
 
-# Stop container
-docker-down:
-	docker compose -f compose/docker-compose.dev.yml down
+dev-up: _check-traefik _ensure-env-dev
+	@echo "🚀 Starting DEVELOPMENT environment..."
+	@docker compose -f compose/docker-compose.dev.yml up -d --remove-orphans
+	@echo ""
+	@echo "📦 Syncing dependencies..."
+	@docker compose -f compose/docker-compose.dev.yml exec -T app uv sync --all-groups > /dev/null 2>&1 || docker compose -f compose/docker-compose.dev.yml exec app uv sync --all-groups
+	@echo ""
+	@echo "✅ Development environment started!"
+	@echo ""
+	@echo "🖥️  Usage:"
+	@echo "   Shell:    make dev-shell"
+	@echo "   TUI:      dashtam (inside shell)"
+	@echo "   CLI:      dashtam-cli --help (inside shell)"
+	@echo ""
+	@echo "📋 Commands:"
+	@echo "   Logs:     make dev-logs"
+	@echo "   Restart:  make dev-restart"
+	@echo "   Stop:     make dev-down"
 
-# Shell into running container
-docker-shell:
-	docker compose -f compose/docker-compose.dev.yml exec app bash
+dev-down:
+	@echo "🛑 Stopping DEVELOPMENT environment..."
+	@docker compose -f compose/docker-compose.dev.yml down
+	@echo "✅ Development stopped"
 
-# Run TUI (interactive)
-docker-run:
-	docker compose -f compose/docker-compose.dev.yml run --rm app dashtam
+dev-logs:
+	@docker compose -f compose/docker-compose.dev.yml logs -f
 
-# Run CLI command
-docker-cli:
-	docker compose -f compose/docker-compose.dev.yml run --rm app dashtam-cli $(CMD)
+dev-shell:
+	@docker compose -f compose/docker-compose.dev.yml exec app /bin/bash
 
-# Run verification inside container
-docker-verify:
-	docker compose -f compose/docker-compose.dev.yml exec app make verify
+dev-restart: dev-down dev-up
 
-# Sync dependencies (after adding new packages)
-docker-sync:
-	docker compose -f compose/docker-compose.dev.yml exec app uv sync --all-groups
+dev-status:
+	@echo "📊 Development Status:"
+	@docker compose -f compose/docker-compose.dev.yml ps
 
-# =============================================================================
-# Container Commands (run inside Docker container)
-# =============================================================================
+dev-build: _check-traefik _ensure-env-dev
+	@echo "🔨 Building DEVELOPMENT containers..."
+	@docker compose -f compose/docker-compose.dev.yml build
+	@echo "✅ Development containers built"
 
-# Install dependencies
-install:
-	uv sync --all-groups
+dev-rebuild: _check-traefik _ensure-env-dev
+	@echo "🔨 Rebuilding DEVELOPMENT containers (no cache)..."
+	@docker compose -f compose/docker-compose.dev.yml build --no-cache
+	@echo "📦 Restarting with fresh dependencies..."
+	@docker compose -f compose/docker-compose.dev.yml down
+	@docker compose -f compose/docker-compose.dev.yml up -d --remove-orphans
+	@echo "📦 Syncing dependencies..."
+	@docker compose -f compose/docker-compose.dev.yml exec -T app uv sync --all-groups > /dev/null 2>&1 || docker compose -f compose/docker-compose.dev.yml exec app uv sync --all-groups
+	@echo "✅ Development containers rebuilt"
 
-# Sync with lock file
-sync:
-	uv sync
+# ==============================================================================
+# CODE QUALITY
+# ==============================================================================
 
-# Linting
-lint:
-	uv run ruff check src tests
+lint: _ensure-dev-running
+	@echo "🔍 Running linters..."
+	@docker compose -f compose/docker-compose.dev.yml exec app uv run ruff check src/ tests/
 
-# Format code
-format:
-	uv run ruff format src tests
-	uv run ruff check --fix src tests
+format: _ensure-dev-running
+	@echo "✨ Formatting code..."
+	@docker compose -f compose/docker-compose.dev.yml exec app uv run ruff format src/ tests/
+	@docker compose -f compose/docker-compose.dev.yml exec app uv run ruff check --fix src/ tests/
 
-# Run tests
-test:
-	uv run pytest
+type-check: _ensure-dev-running
+	@echo "🔍 Running type checks with mypy..."
+	@docker compose -f compose/docker-compose.dev.yml exec -w /app app uv run mypy src tests
 
-# Run tests with coverage
-test-cov:
-	uv run pytest --cov=dashtam_terminal --cov-report=term-missing --cov-report=html
+test: _ensure-dev-running
+	@echo "🧪 Running tests..."
+	@docker compose -f compose/docker-compose.dev.yml exec -T app uv run pytest tests/ -v --cov=src --cov-report=term-missing
 
-# Type checking
-type-check:
-	uv run mypy src
+# ==============================================================================
+# COMPREHENSIVE VERIFICATION
+# ==============================================================================
 
-# Run full verification (sequential, fails fast)
-verify:
-	@echo "\n=== Formatting ==="
-	uv run ruff format src tests
-	@echo "\n=== Linting ==="
-	uv run ruff check src tests
-	@echo "\n=== Type Checking ==="
-	uv run mypy src
-	@echo "\n=== Running Tests ==="
-	uv run pytest
-	@echo "\n✅ All checks passed!"
+verify: _ensure-dev-running
+	@echo "🔍 ====================================="
+	@echo "🔍 COMPREHENSIVE VERIFICATION (fail-fast)"
+	@echo "🔍 ====================================="
+	@echo ""
+	@echo "📋 Running 4 verification steps:"
+	@echo "   1. Format (auto-fix)"
+	@echo "   2. Lint"
+	@echo "   3. Type check"
+	@echo "   4. Tests"
+	@echo ""
+	@echo "⚠️  Fail-fast: Stops on first failure"
+	@echo ""
+	@echo "✨ Step 1/4: Formatting (auto-fix)..."; \
+	docker compose -f compose/docker-compose.dev.yml exec -T app uv run ruff format src/ tests/ || { echo "❌ Format command failed"; exit 1; }; \
+	docker compose -f compose/docker-compose.dev.yml exec -T app uv run ruff check --fix src/ tests/ || { echo "❌ Format check --fix failed"; exit 1; }; \
+	echo "✅ Formatting completed"; \
+	echo ""; \
+	echo "🔍 Step 2/4: Linting..."; \
+	docker compose -f compose/docker-compose.dev.yml exec -T app uv run ruff check src/ tests/ || { echo "❌ Lint failed - manual fixes required"; exit 1; }; \
+	echo "✅ Lint passed"; \
+	echo ""; \
+	echo "🔍 Step 3/4: Type checking..."; \
+	docker compose -f compose/docker-compose.dev.yml exec -T -w /app app uv run mypy src tests || { echo "❌ Type check failed - manual fixes required"; exit 1; }; \
+	echo "✅ Type check passed"; \
+	echo ""; \
+	echo "🧪 Step 4/4: Running tests..."; \
+	docker compose -f compose/docker-compose.dev.yml exec -T app uv run pytest tests/ -v --cov=src --cov-report=term-missing || { echo "❌ Tests failed - manual fixes required"; exit 1; }; \
+	echo "✅ Tests passed"; \
+	echo ""; \
+	echo "🎉 ====================================="; \
+	echo "🎉 ALL VERIFICATION CHECKS PASSED!"; \
+	echo "🎉 ====================================="; \
+	echo ""; \
+	echo "📦 Ready for:"; \
+	echo "   - Version bump"; \
+	echo "   - CHANGELOG update"; \
+	echo "   - Commit & PR"; \
+	echo "   - Release tagging"
 
-# TUI development (with hot reload)
-dev:
-	uv run textual run --dev src/dashtam_terminal/main.py
+# ==============================================================================
+# UTILITIES
+# ==============================================================================
 
-# Run TUI
-run:
-	uv run dashtam
+check:
+	@echo "🔍 Checking setup..."
+	@echo ""
+	@echo "Docker:"
+	@docker --version
+	@docker compose version
+	@echo ""
+	@echo "Traefik:"
+	@$(MAKE) _check-traefik-verbose
+	@echo ""
+	@echo "✅ All checks passed!"
 
-# Run CLI
-cli:
-	uv run dashtam-cli
+status-all:
+	@echo "=============== Development ==============="
+	@docker compose -f compose/docker-compose.dev.yml ps 2>/dev/null || echo "Not running"
+	@echo ""
+	@echo "================ Traefik =================="
+	@docker ps --filter "name=traefik" --format "table {{.Names}}\t{{.Status}}" 2>/dev/null || echo "Not running"
 
-# Clean build artifacts
+ps:
+	@echo "📊 Dashtam Terminal Containers:"
+	@docker ps -a --filter "name=dashtam-terminal" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+
 clean:
-	rm -rf build/
-	rm -rf dist/
-	rm -rf *.egg-info/
-	rm -rf .pytest_cache/
-	rm -rf .mypy_cache/
-	rm -rf .ruff_cache/
-	rm -rf htmlcov/
-	rm -rf .coverage
-	find . -type d -name __pycache__ -exec rm -rf {} +
+	@echo "🧹 Cleaning development environment..."
+	@docker compose -f compose/docker-compose.dev.yml down -v --remove-orphans 2>/dev/null || true
+	@echo "✅ Cleanup complete"
+
+# ==============================================================================
+# INTERNAL HELPERS
+# ==============================================================================
+
+# Check if Traefik is running
+_check-traefik:
+	@docker ps | grep -q traefik || { \
+		echo "❌ Traefik not running!"; \
+		echo ""; \
+		echo "Start Traefik:"; \
+		echo "  cd ~/docker-services/traefik && make up"; \
+		echo ""; \
+		exit 1; \
+	}
+
+# Check Traefik with verbose output
+_check-traefik-verbose:
+	@if docker ps | grep -q traefik; then \
+		echo "✅ Traefik is running"; \
+		docker ps --filter "name=traefik" --format "   {{.Names}}: {{.Status}}"; \
+	else \
+		echo "❌ Traefik not running"; \
+		echo "   Start: cd ~/docker-services/traefik && make up"; \
+	fi
+
+# Ensure .env.dev exists (idempotent copy from example)
+_ensure-env-dev:
+	@if [ ! -f env/.env.dev ]; then \
+		echo "📋 Creating env/.env.dev from example..."; \
+		cp env/.env.example env/.env.dev; \
+		echo "✅ Created env/.env.dev"; \
+	fi
+
+# Ensure dev container is running
+_ensure-dev-running:
+	@docker compose -f compose/docker-compose.dev.yml ps -q app > /dev/null 2>&1 || $(MAKE) dev-up
