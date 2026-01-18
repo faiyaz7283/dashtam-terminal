@@ -1,0 +1,26 @@
+name: dashtam-terminal-dev
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: development
+    container_name: dashtam-terminal-dev
+    env_file:
+      - ../env/.env.dev
+    volumes:
+      # Mount entire project for hot reload
+      - ..:/app:rw
+      # Exclude .venv to avoid macOS/Linux binary conflicts
+      - /app/.venv
+    # Allow TUI to access terminal (interactive mode)
+    stdin_open: true
+    tty: true
+    networks:
+      - traefik-public  # Access Dashtam API via dashtam.local
+    restart: unless-stopped
+
+networks:
+  traefik-public:
+    external: true
