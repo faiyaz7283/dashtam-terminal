@@ -2,7 +2,7 @@
 
 **Purpose**: Project-specific rules for the Dashtam Terminal TUI application.
 
-**Global Standards**: See `~/dashtam-suite/WARP.md` for shared patterns (Python, Git, Docker, Testing).
+**Global Standards**: See `~/dashtam/WARP.md` for shared patterns (Python, Git, Docker, Testing).
 
 **Design Document**: `~/references/CLI/dashtam-terminal-design.md`
 
