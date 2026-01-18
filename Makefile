@@ -2,6 +2,13 @@
         test lint format type-check verify clean check status-all ps
 
 # ==============================================================================
+# VARIABLES
+# ==============================================================================
+
+MARKDOWN_LINT_IMAGE := node:24-alpine
+MARKDOWN_LINT_CMD := npx markdownlint-cli2
+
+# ==============================================================================
 # HELP
 # ==============================================================================
 
@@ -156,30 +163,55 @@ verify: _ensure-dev-running
 	@echo "🔍 COMPREHENSIVE VERIFICATION (fail-fast)"
 	@echo "🔍 ====================================="
 	@echo ""
-	@echo "📋 Running 4 verification steps:"
+	@echo "📋 Running 7 verification steps:"
 	@echo "   1. Format (auto-fix)"
 	@echo "   2. Lint"
 	@echo "   3. Type check"
 	@echo "   4. Tests"
+	@echo "   5. Markdown linting - docs/"
+	@echo "   6. Markdown linting - root files"
+	@echo "   7. Documentation build"
 	@echo ""
 	@echo "⚠️  Fail-fast: Stops on first failure"
 	@echo ""
-	@echo "✨ Step 1/4: Formatting (auto-fix)..."; \
+	@echo "✨ Step 1/7: Formatting (auto-fix)..."; \
 	docker compose -f compose/docker-compose.dev.yml exec -T app uv run ruff format src/ tests/ || { echo "❌ Format command failed"; exit 1; }; \
 	docker compose -f compose/docker-compose.dev.yml exec -T app uv run ruff check --fix src/ tests/ || { echo "❌ Format check --fix failed"; exit 1; }; \
 	echo "✅ Formatting completed"; \
 	echo ""; \
-	echo "🔍 Step 2/4: Linting..."; \
+	echo "🔍 Step 2/7: Linting..."; \
 	docker compose -f compose/docker-compose.dev.yml exec -T app uv run ruff check src/ tests/ || { echo "❌ Lint failed - manual fixes required"; exit 1; }; \
 	echo "✅ Lint passed"; \
 	echo ""; \
-	echo "🔍 Step 3/4: Type checking..."; \
+	echo "🔍 Step 3/7: Type checking..."; \
 	docker compose -f compose/docker-compose.dev.yml exec -T -w /app app uv run mypy src tests || { echo "❌ Type check failed - manual fixes required"; exit 1; }; \
 	echo "✅ Type check passed"; \
 	echo ""; \
-	echo "🧪 Step 4/4: Running tests..."; \
-	docker compose -f compose/docker-compose.dev.yml exec -T app uv run pytest tests/ -v --cov=src --cov-report=term-missing || { echo "❌ Tests failed - manual fixes required"; exit 1; }; \
+	echo "🧪 Step 4/7: Running tests with coverage..."; \
+	docker compose -f compose/docker-compose.dev.yml exec -T app uv run pytest tests/ -v --cov=src --cov-report=term-missing --cov-report=html || { echo "❌ Tests failed - manual fixes required"; exit 1; }; \
 	echo "✅ Tests passed"; \
+	echo ""; \
+	echo "📝 Step 5/7: Linting docs/ markdown files..."; \
+	docker run --rm -v $(PWD):/workspace:ro -w /workspace $(MARKDOWN_LINT_IMAGE) sh -c "$(MARKDOWN_LINT_CMD) 'docs/**/*.md' || exit 1" || { echo "❌ docs/ markdown linting failed - manual fixes required"; exit 1; }; \
+	echo "✅ docs/ markdown linting passed"; \
+	echo ""; \
+	echo "📝 Step 6/7: Linting root markdown files..."; \
+	docker run --rm -v $(PWD):/workspace:ro -w /workspace $(MARKDOWN_LINT_IMAGE) sh -c "$(MARKDOWN_LINT_CMD) 'README.md' 'CHANGELOG.md' 'WARP.md' || exit 1" || { echo "❌ Root markdown linting failed - manual fixes required"; exit 1; }; \
+	echo "✅ Root markdown linting passed"; \
+	echo ""; \
+	echo "📚 Step 7/7: Building documentation (strict mode)..."; \
+	docker compose -f compose/docker-compose.dev.yml exec -T app uv sync --all-groups > /dev/null 2>&1; \
+	docker compose -f compose/docker-compose.dev.yml exec -T app uv run mkdocs build --strict 2>&1 | tee /tmp/mkdocs-build.log || true; \
+	if grep -E "WARNING" /tmp/mkdocs-build.log | grep -v "griffe:" | grep -v "mkdocs_autorefs:" | grep -q .; then \
+		echo "❌ Documentation warnings found (broken links, missing pages, etc.)"; \
+		grep -E "WARNING" /tmp/mkdocs-build.log | grep -v "griffe:" | grep -v "mkdocs_autorefs:"; \
+		exit 1; \
+	fi; \
+	if ! docker compose -f compose/docker-compose.dev.yml exec -T app test -d site; then \
+		echo "❌ Documentation build failed - site/ directory not created"; \
+		exit 1; \
+	fi; \
+	echo "✅ Documentation built successfully (griffe warnings ignored)"; \
 	echo ""; \
 	echo "🎉 ====================================="; \
 	echo "🎉 ALL VERIFICATION CHECKS PASSED!"; \
