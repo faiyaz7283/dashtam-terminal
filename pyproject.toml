@@ -102,24 +102,43 @@ skip-magic-trailing-comma = false
 line-ending = "auto"
 
 [tool.mypy]
-python_version = "3.14"
+# Use Python version from project configuration
+# No need to specify python_version - mypy will use the environment's version
+files = ["src/dashtam_terminal", "tests"]
+exclude = [
+    "htmlcov/",
+    "site/",
+    ".venv/",
+    "venv/",
+]
 strict = true
 warn_return_any = true
 warn_unused_configs = true
-disallow_untyped_defs = true
-disallow_incomplete_defs = true
-check_untyped_defs = true
-disallow_untyped_decorators = true
-no_implicit_optional = true
-warn_redundant_casts = true
-warn_unused_ignores = true
-warn_no_return = true
-follow_imports = "normal"
-show_error_codes = true
+no_implicit_reexport = true
 
+# Per-module options for third-party libraries without stubs
 [[tool.mypy.overrides]]
-module = "tests.*"
+module = [
+    "textual.*",
+    "typer",
+    "httpx",
+    "httpx_sse",
+    "httpx_ws",
+    "questionary",
+    "respx",
+]
+ignore_missing_imports = true
+
+# Test files: relax strict typing (common practice)
+# Test functions are simple, pytest fixtures are hard to annotate properly
+# However, check_untyped_defs=true ensures type mismatches in test bodies are caught
+[[tool.mypy.overrides]]
+module = ["tests.*"]
 disallow_untyped_defs = false
+disallow_untyped_decorators = false
+disallow_untyped_calls = false
+disallow_incomplete_defs = false
+check_untyped_defs = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
