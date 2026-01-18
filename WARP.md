@@ -292,4 +292,42 @@ class Settings(BaseSettings):
 
 ---
 
+## 10. Git Workflow
+
+### Branch Structure
+
+- `main` — Production-ready code (protected)
+- `development` — Integration branch (protected)
+- `feature/*` — New features (from development)
+- `fix/*` — Bug fixes (from development)
+
+### Release Checklist
+
+1. [ ] Verify all milestone issues are closed (or moved to next milestone)
+2. [ ] Update version in `pyproject.toml`
+3. [ ] Run `uv lock` (inside dev container)
+4. [ ] Update `CHANGELOG.md` with release notes (reference closed issues)
+5. [ ] Commit, push, create PR to `development`
+6. [ ] Wait for CI, merge PR to `development`
+7. [ ] Create PR from `development` → `main`
+8. [ ] Merge PR to `main`
+9. [ ] Tag release: `git tag -a vX.Y.Z -m "message"`
+10. [ ] Push tag: `git push origin vX.Y.Z`
+11. [ ] Create GitHub Release: `gh release create vX.Y.Z --title "..." --notes "..."`
+12. [ ] **SYNC BACK**: Merge `main` into `development`
+13. [ ] Close the milestone on GitHub (if all issues complete)
+
+### GitHub Issues Integration
+
+**All feature development is tracked via GitHub Issues**. See `~/dashtam/WARP.md` Section 10 for the full workflow.
+
+**Quick Reference**:
+
+- **Branch naming**: `feature/issue-{N}-{slug}`
+- **Commit format**: `type(scope): description (#N)`
+- **PR body**: Include `Closes #N` for auto-linking and auto-close
+- **Labels**: `status:in-progress`, `terminal`, feature labels
+
+---
+
 **Last Updated**: 2026-01-18
