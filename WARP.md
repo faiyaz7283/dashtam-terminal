@@ -168,6 +168,7 @@ def accounts(
 ### Shared Code with TUI
 
 CLI and TUI share:
+
 - `infrastructure/api/` — Same API client
 - `domain/models/` — Same data models
 - `core/` — Same config, errors, result types
@@ -278,6 +279,7 @@ class Settings(BaseSettings):
 **Version**: 0.1.0 (Initial setup)
 
 **Implemented**:
+
 - [x] Project structure
 - [x] Docker development environment
 - [x] Entry points (dashtam, dashtam-cli)
@@ -285,6 +287,7 @@ class Settings(BaseSettings):
 - [x] MkDocs documentation
 
 **Next Steps**:
+
 - [ ] Core result types and errors
 - [ ] API client infrastructure
 - [ ] Authentication flow
