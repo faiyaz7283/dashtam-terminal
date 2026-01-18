@@ -1,0 +1,11 @@
+/* Custom styles for Dashtam Terminal documentation */
+
+/* Terminal-style code blocks */
+.md-typeset code {
+  font-family: "JetBrains Mono", "Fira Code", "Consolas", monospace;
+}
+
+/* Improve admonition styling */
+.md-typeset .admonition {
+  border-radius: 4px;
+}
