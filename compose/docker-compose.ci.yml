@@ -1,0 +1,22 @@
+services:
+  app:
+    container_name: dashtam-terminal-ci-app
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: development
+    env_file:
+      - ../env/.env.ci
+    volumes:
+      - ../src:/app/src:ro
+      - ../tests:/app/tests:ro
+      - ../pyproject.toml:/app/pyproject.toml:ro
+      - ../uv.lock:/app/uv.lock:ro
+      - ci-venv:/app/.venv
+    working_dir: /app
+    stdin_open: true
+    tty: true
+    command: ["sleep", "infinity"]
+
+volumes:
+  ci-venv:
