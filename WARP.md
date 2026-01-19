@@ -336,6 +336,7 @@ class Settings(BaseSettings):
 ## 11. Architectural Decisions
 
 ### ADR-001: Nested src-layout for Package Structure
+
 **Decision**: Use `src/dashtam_terminal/` (nested src-layout) instead of flat `src/` layout.
 **Status**: Accepted
 **Date**: 2026-01-19
@@ -347,6 +348,7 @@ The Dashtam API project uses a flat `src/` layout (modules directly in `src/`). 
 The terminal project requires installable entry points (`dashtam`, `dashtam-cli` commands) defined in `[project.scripts]`. This requires the project to be an installable Python package with proper package discovery.
 
 **Key Findings**:
+
 - `uv_build` backend expects `src/<package_name>/__init__.py` by default
 - The API project has NO `[build-system]` or `[project.scripts]` — it runs directly via `uvicorn src.main:app` without being installed as a package
 - Flat `src/` layout with entry points requires either:
@@ -355,18 +357,21 @@ The terminal project requires installable entry points (`dashtam`, `dashtam-cli`
   - Removing entry points (poor UX for CLI app)
 
 **Decision Rationale**:
+
 1. **Entry points are essential** for TUI/CLI apps (`dashtam`, `dashtam-cli`)
 2. **uv_build works seamlessly** with nested `src/dashtam_terminal/` layout
 3. **Consistency with uv ecosystem** — keep using uv for everything
 4. **Different use cases** — API is a server (runs from source), Terminal is an installable CLI app
 
 **Consequences**:
+
 - Terminal uses `src/dashtam_terminal/` structure
 - API uses flat `src/` structure
 - This is intentional — the projects have different packaging requirements
 - Imports use `from dashtam_terminal import ...` (not `from src import ...`)
 
 **Alternatives Considered**:
+
 - `hatchling` backend: More flexible but adds complexity, different from uv ecosystem
 - Remove entry points: Poor UX, users would need `python -m` commands
 - Flat src with uv_build config: Limited support, fragile
