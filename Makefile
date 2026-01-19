@@ -44,6 +44,12 @@ help:
 	@echo "  make test            - Run tests"
 	@echo "  make verify          - 🔥 FULL verification (format, lint, type-check, test)"
 	@echo ""
+	@echo "  💡 TEST_PATH - Run specific test file/directory:"
+	@echo "     make test TEST_PATH=tests/unit/test_foo.py"
+	@echo ""
+	@echo "  💡 ARGS - Additional pytest arguments:"
+	@echo "     make test ARGS=\"-k test_foo\""
+	@echo ""
 	@echo "🔧 Utilities:"
 	@echo "  make setup           - First-time setup (idempotent)"
 	@echo "  make check           - Verify Traefik is running"
@@ -150,9 +156,12 @@ type-check: _ensure-dev-running
 	@echo "🔍 Running type checks with mypy..."
 	@docker compose -f compose/docker-compose.dev.yml exec -w /app app uv run mypy src tests
 
+# Default test path (can be overridden with TEST_PATH)
+TEST_PATH_DEFAULT ?= tests/
+
 test: _ensure-dev-running
 	@echo "🧪 Running tests..."
-	@docker compose -f compose/docker-compose.dev.yml exec -T app uv run pytest tests/ -v --cov=src --cov-report=term-missing
+	@docker compose -f compose/docker-compose.dev.yml exec -T app uv run pytest $(if $(TEST_PATH),$(TEST_PATH),$(TEST_PATH_DEFAULT)) -v --cov=src --cov-report=term-missing $(ARGS)
 
 # ==============================================================================
 # COMPREHENSIVE VERIFICATION
