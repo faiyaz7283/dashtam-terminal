@@ -1,5 +1,14 @@
 # Dashtam Terminal
 
+> Bloomberg-style TUI for the Dashtam financial data platform
+
+[![Documentation](https://img.shields.io/badge/docs-mkdocs-blue)](https://faiyaz7283.github.io/dashtam-terminal/)
+[![Test Suite](https://github.com/faiyaz7283/dashtam-terminal/workflows/Test%20Suite/badge.svg)](https://github.com/faiyaz7283/dashtam-terminal/actions)
+[![codecov](https://codecov.io/gh/faiyaz7283/dashtam-terminal/branch/development/graph/badge.svg)](https://codecov.io/gh/faiyaz7283/dashtam-terminal)
+[![Python 3.14](https://img.shields.io/badge/python-3.14-blue.svg)](https://www.python.org/downloads/)
+[![Textual](https://img.shields.io/badge/Textual-7.3+-green.svg)](https://textual.textualize.io/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 A sophisticated terminal user interface (TUI) for the Dashtam financial data platform. Inspired by Bloomberg Terminal, it provides a rich, real-time interface for managing financial accounts, viewing transactions, monitoring holdings, and connecting to financial providers.
 
 ## Features
