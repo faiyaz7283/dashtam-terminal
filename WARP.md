@@ -1,381 +1,345 @@
 # Dashtam Terminal — Project Rules and Context
 
-**Purpose**: Project-specific rules for the Dashtam Terminal TUI application.
+**Purpose**: Terminal-specific rules and architecture. For shared rules, see `~/dashtam/WARP.md`.
 
-**Global Standards**: See `~/dashtam/WARP.md` for shared patterns (Python, Git, Docker, Testing).
-
-**Design Document**: `~/references/CLI/dashtam-terminal-design.md`
+**⚠️ IMPORTANT**: See `~/dashtam/WARP.md` for WARP.md structure rules. Do NOT duplicate Global rules here.
 
 ---
 
-## 1. Project Overview
+## Global Rules Reference
 
-**Dashtam Terminal** is a Bloomberg-style TUI for the Dashtam financial data platform.
+**See `~/dashtam/WARP.md` for complete definitions of these universal rules:**
 
-**Core Features**:
-
-- Full-screen terminal interface (Textual)
-- Real-time data via WebSocket/SSE
-- Extractable CLI companion (Typer)
-- Keyboard-driven navigation
-
-**Technology Stack**:
-
-- **TUI Framework**: Textual 7.3+
-- **CLI Framework**: Typer 0.21+
-- **HTTP Client**: HTTPX (async) with httpx-sse, httpx-ws
-- **Package Manager**: UV (NOT pip)
-- **Python**: 3.14+
+- **Rule 1**: Repository Structure (meta repo, submodules)
+- **Rule 2**: Development Philosophy (clean architecture, type safety, latest stable)
+- **Rule 3**: Modern Python Patterns (Protocol over ABC, type hints, Result types)
+- **Rule 4**: Docker Containerization (Makefile commands, code quality)
+- **Rule 5**: Git Workflow (branches, conventional commits, releases)
+- **Rule 6**: Code Quality Standards (Ruff, mypy, docstrings)
+- **Rule 7**: Testing Philosophy (coverage targets, test types)
+- **Rule 8**: Environment Configuration (.env files, idempotent setup)
+- **Rule 9**: Documentation Standards (markdown linting, MkDocs)
+- **Rule 10**: AI Agent Instructions (mandatory pre-development process)
+- **Rule 11**: GitHub Project (unified platform tracking)
+- **Rule 12**: GitHub Issues Workflow (issue lifecycle, labels, milestones)
 
 ---
 
-## 2. Architecture
+## Terminal-Specific Rules
 
-### Layer Structure (Simplified Hexagonal)
+### 1. Technology Stack
 
-```text
+**TUI Framework**: Textual (latest stable)
+**CLI Framework**: Typer (latest stable)
+**API Client**: httpx (latest stable) with async
+**Package Manager**: UV (latest stable)
+**Build Backend**: uv_build
+**Entry Points**: CLI (`dashtam`) and TUI (`dashtam-tui`)
+**Testing**: pytest with Textual Pilot
+**CI/CD**: GitHub Actions
+
+**Version Policy**: Always use latest stable versions. Check `pyproject.toml` for current versions.
+
+### 2. Architecture: Simplified Hexagonal
+
+**Layer Structure**:
+
+```
 src/dashtam_terminal/
-├── core/                 # Shared kernel
-│   ├── config.py         # Settings, environment
-│   ├── result.py         # Result[T, E] types
-│   └── errors.py         # Error hierarchy
-├── domain/               # Business logic (pure Python)
-│   ├── models/           # Data models
-│   ├── protocols/        # Interfaces
-│   └── types.py          # Annotated types
-├── infrastructure/       # External integrations
-│   └── api/              # Dashtam API client (HTTPX)
-└── presentation/         # User interface
-    ├── tui/              # Textual screens and widgets
-    │   ├── screens/      # Full-screen views
-    │   ├── widgets/      # Reusable components
-    │   └── app.py        # Main Textual app
-    └── cli/              # Typer commands
-        └── app.py        # CLI entry point
+├── domain/             # Business logic (API models, validation)
+│   ├── models/         # Pydantic models from API
+│   └── protocols/      # Interface definitions
+├── application/        # Use cases
+│   ├── api_client/     # API communication layer
+│   └── commands/       # Business operations
+├── adapters/           # External integrations
+│   └── api/            # HTTP client implementations
+├── ui/                 # User interfaces
+│   ├── tui/            # Textual screens/widgets
+│   └── cli/            # Typer commands
+└── config.py           # Configuration management
 ```
 
-### Entry Points
+**Dependency Rule**:
+- ✅ UI depends on Application (calls commands)
+- ✅ Application depends on Domain (uses models, protocols)
+- ✅ Adapters implement Domain protocols
+- ❌ Domain NEVER depends on UI or Adapters
+
+### 3. Entry Points
+
+**Two entry points** (defined in `pyproject.toml`):
 
 ```toml
 [project.scripts]
-dashtam = "dashtam_terminal.main:run_tui"        # TUI (default)
-dashtam-cli = "dashtam_terminal.presentation.cli.app:app"  # CLI
+dashtam = "dashtam_terminal.ui.cli.main:app"
+dashtam-tui = "dashtam_terminal.ui.tui.main:run"
 ```
 
----
+**Usage**:
 
-## 3. API Client Patterns
-
-### Async-First
-
-All API calls are async (matches Dashtam API's async nature):
-
-```python
-class DashtamClient:
-    async def get_accounts(self) -> Result[list[Account], APIError]:
-        response = await self._client.get("/api/v1/accounts")
-        if response.is_error:
-            return Failure(error=APIError.from_response(response))
-        return Success(value=[Account(**a) for a in response.json()])
+```bash
+dashtam --help           # CLI interface
+dashtam login            # CLI login command
+dashtam-tui              # Launch TUI
 ```
 
-### Real-Time Events (SSE)
+### 4. API Client Patterns
+
+**Async-First**:
 
 ```python
-async def stream_events(self) -> AsyncIterator[Event]:
-    async with httpx_sse.aconnect_sse(
-        self._client, "GET", "/api/v1/events/stream"
-    ) as event_source:
-        async for sse in event_source.aiter_sse():
-            yield Event.from_sse(sse)
+import httpx
+from dashtam_terminal.config import settings
+
+async with httpx.AsyncClient(
+    base_url=settings.api_url,
+    headers={"Authorization": f"Bearer {token}"}
+) as client:
+    response = await client.get("/api/v1/accounts")
 ```
 
----
-
-## 4. TUI Patterns (Textual)
-
-### Screen Management
+**Real-Time Events (SSE)**:
 
 ```python
-from textual.app import App, ComposeResult
+async def stream_events():
+    async with httpx.AsyncClient() as client:
+        async with client.stream("GET", f"{api_url}/api/v1/events") as response:
+            async for line in response.aiter_lines():
+                if line.startswith("data: "):
+                    data = json.loads(line[6:])
+                    yield data
+```
+
+**Authentication Flow**:
+1. User provides credentials
+2. Call `POST /sessions` (API endpoint)
+3. Store access token securely
+4. Refresh token before expiration
+
+### 5. TUI Patterns (Textual)
+
+**Screen Management**:
+
+```python
+from textual.app import App
 from textual.screen import Screen
 
 class DashboardScreen(Screen):
-    """Main dashboard with account overview."""
-    
-    def compose(self) -> ComposeResult:
+    def compose(self):
         yield Header()
-        yield AccountsPanel()
+        yield AccountsTable()
         yield Footer()
+
+class TerminalApp(App):
+    def on_mount(self):
+        self.push_screen(DashboardScreen())
+```
+
+**Keybindings**:
+
+```python
+class DashboardScreen(Screen):
+    BINDINGS = [
+        ("q", "quit", "Quit"),
+        ("r", "refresh", "Refresh"),
+        ("a", "show_accounts", "Accounts"),
+    ]
     
-    async def on_mount(self) -> None:
-        """Load data when screen mounts."""
-        await self.refresh_accounts()
+    def action_refresh(self):
+        # Refresh data logic
+        ...
 ```
 
-### Keybindings
+**Widget Communication**:
 
 ```python
-BINDINGS = [
-    ("q", "quit", "Quit"),
-    ("r", "refresh", "Refresh"),
-    ("a", "accounts", "Accounts"),
-    ("t", "transactions", "Transactions"),
-    ("/", "search", "Search"),
-]
-```
-
-### Widget Communication
-
-Use Textual's message system for widget-to-widget communication:
-
-```python
-class AccountSelected(Message):
-    """Posted when user selects an account."""
-    def __init__(self, account_id: UUID) -> None:
-        self.account_id = account_id
-        super().__init__()
+# Post message
+self.post_message(AccountSelected(account_id=123))
 
 # In parent screen
-def on_account_selected(self, event: AccountSelected) -> None:
-    self.query_one(TransactionsPanel).load(event.account_id)
+def on_account_selected(self, event: AccountSelected):
+    self.push_screen(AccountDetailScreen(account_id=event.account_id))
 ```
 
----
+### 6. CLI Patterns (Typer)
 
-## 5. CLI Patterns (Typer)
-
-### Command Structure
+**Command Structure**:
 
 ```python
 import typer
 
-app = typer.Typer(help="Command-line interface for Dashtam API.")
+app = typer.Typer()
 
 @app.command()
-def whoami() -> None:
-    """Show the currently authenticated user."""
+def login(
+    email: str = typer.Option(..., prompt=True),
+    password: str = typer.Option(..., prompt=True, hide_input=True),
+):
+    """Authenticate with Dashtam API."""
+    # Login logic
     ...
 
 @app.command()
-def accounts(
-    format: str = typer.Option("table", help="Output format: table, json"),
-) -> None:
+def accounts():
     """List all accounts."""
+    # Fetch and display accounts
     ...
 ```
 
-### Shared Code with TUI
+**Shared Code with TUI**:
 
-CLI and TUI share:
+Both TUI and CLI use the same:
+- API client (`application/api_client/`)
+- Business logic (`application/commands/`)
+- Domain models (`domain/models/`)
 
-- `infrastructure/api/` — Same API client
-- `domain/models/` — Same data models
-- `core/` — Same config, errors, result types
+**Only UI layer differs** (TUI uses Textual, CLI uses Typer output).
 
-Only `presentation/` layer differs.
+### 7. Development Commands
 
----
-
-## 6. Development Commands
+**Environment**:
 
 ```bash
-# Environment
-make dev-up          # Start dev environment
-make dev-down        # Stop
-make dev-shell       # Shell into container
-make dev-logs        # View logs
-
-# Inside container
-dashtam              # Launch TUI
-dashtam-cli --help   # CLI help
-dashtam-cli accounts # List accounts
-
-# Code quality
-make lint            # Ruff linter
-make format          # Ruff formatter
-make type-check      # Mypy
-make test            # Pytest
-make verify          # All checks
+make dev-up        # Start terminal dev environment
+make dev-down      # Stop environment
+make dev-shell     # Shell into terminal container
 ```
 
----
+**Inside container**:
 
-## 7. Testing Strategy
+```bash
+uv run dashtam --help      # Test CLI
+uv run dashtam-tui         # Test TUI
+```
 
-### TUI Testing
+**Code quality**:
 
-Use Textual's test harness:
+```bash
+make lint          # Run ruff
+make format        # Format code
+make type-check    # Run mypy
+make test          # Run tests
+make verify        # Full verification
+```
+
+### 8. Testing Strategy
+
+**TUI Testing** (Textual Pilot):
 
 ```python
-from textual.testing import AppTest
+from textual.pilot import Pilot
 
-async def test_dashboard_loads():
-    app = AppTest(DashtamApp)
+async def test_dashboard_screen():
+    app = TerminalApp()
     async with app.run_test() as pilot:
-        await pilot.press("a")  # Navigate to accounts
-        assert app.query_one(AccountsScreen)
+        await pilot.press("a")  # Press 'a' key
+        assert pilot.app.screen.id == "accounts"
 ```
 
-### CLI Testing
-
-Use Typer's CliRunner:
+**CLI Testing**:
 
 ```python
 from typer.testing import CliRunner
-from dashtam_terminal.presentation.cli.app import app
 
-runner = CliRunner()
-
-def test_whoami():
-    result = runner.invoke(app, ["whoami"])
+def test_login_command():
+    runner = CliRunner()
+    result = runner.invoke(app, ["login"], input="user@example.com\npassword\n")
     assert result.exit_code == 0
+    assert "Login successful" in result.output
 ```
 
-### API Client Testing
-
-Use respx for mocking HTTPX:
+**API Client Testing**:
 
 ```python
 import respx
+import httpx
 
 @respx.mock
-async def test_get_accounts():
-    respx.get("/api/v1/accounts").respond(json=[...])
-    result = await client.get_accounts()
-    assert isinstance(result, Success)
+async def test_fetch_accounts():
+    respx.get(f"{api_url}/api/v1/accounts").mock(
+        return_value=httpx.Response(200, json=[...])
+    )
+    accounts = await api_client.get_accounts()
+    assert len(accounts) > 0
 ```
 
----
+### 9. Configuration
 
-## 8. Configuration
+**Environment Variables**:
 
-### Environment Variables
-
-```bash
-# env/.env.example
-APP_NAME=dashtam-terminal
-APP_ENV=development
-DASHTAM_API_BASE_URL=https://dashtam.local
+```
+DASHTAM_API_URL=https://dashtam.local/api/v1
+DASHTAM_API_TOKEN=<access-token>
+DASHTAM_LOG_LEVEL=INFO
 ```
 
-### Settings Class
+**Settings Class**:
 
 ```python
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
-    app_name: str = "dashtam-terminal"
-    app_env: str = "development"
-    dashtam_api_base_url: str = "https://dashtam.local"
-    
-    model_config = SettingsConfigDict(env_file="env/.env.dev")
+    api_url: str
+    api_token: str | None = None
+    log_level: str = "INFO"
+
+    model_config = {
+        "env_prefix": "DASHTAM_",
+        "env_file": ".env",
+    }
+
+settings = Settings()
 ```
 
----
+### 10. Package Structure (Nested src-layout)
 
-## 9. Current Status
+**Why nested `src/dashtam_terminal/` instead of flat `src/`?**
 
-**Version**: 0.1.0 (Initial setup)
+**Reason**: Terminal is a **CLI application** installed via `uv pip install -e .` or distributed as a package. The `uv_build` backend requires the nested layout for proper entry point resolution.
 
-**Implemented**:
+**Structure**:
 
-- [x] Project structure
-- [x] Docker development environment
-- [x] Entry points (dashtam, dashtam-cli)
-- [x] GitHub Actions CI
-- [x] MkDocs documentation
+```
+dashtam-terminal/
+├── src/
+│   └── dashtam_terminal/       # Package name
+│       ├── __init__.py
+│       ├── domain/
+│       ├── application/
+│       ├── adapters/
+│       └── ui/
+├── tests/
+├── pyproject.toml
+└── README.md
+```
 
-**Next Steps**:
+**Imports**:
 
-- [ ] Core result types and errors
-- [ ] API client infrastructure
-- [ ] Authentication flow
-- [ ] Basic TUI screens
+```python
+from dashtam_terminal.domain.models import Account
+from dashtam_terminal.application.api_client import ApiClient
+```
 
----
+**Entry Points**:
 
-## 10. Git Workflow
-
-### Branch Structure
-
-- `main` — Production-ready code (protected)
-- `development` — Integration branch (protected)
-- `feature/*` — New features (from development)
-- `fix/*` — Bug fixes (from development)
-
-### Release Checklist
-
-1. [ ] Verify all milestone issues are closed (or moved to next milestone)
-2. [ ] Update version in `pyproject.toml`
-3. [ ] Run `uv lock` (inside dev container)
-4. [ ] Update `CHANGELOG.md` with release notes (reference closed issues)
-5. [ ] Commit, push, create PR to `development`
-6. [ ] Wait for CI, merge PR to `development`
-7. [ ] Create PR from `development` → `main`
-8. [ ] Merge PR to `main`
-9. [ ] Tag release: `git tag -a vX.Y.Z -m "message"`
-10. [ ] Push tag: `git push origin vX.Y.Z`
-11. [ ] Create GitHub Release: `gh release create vX.Y.Z --title "..." --notes "..."`
-12. [ ] **SYNC BACK**: Merge `main` into `development`
-13. [ ] Close the milestone on GitHub (if all issues complete)
-
-### GitHub Issues Integration
-
-**All feature development is tracked via GitHub Issues**. See `~/dashtam/WARP.md` Section 10 for the full workflow.
-
-**Quick Reference**:
-
-- **Branch naming**: `feature/issue-{N}-{slug}`
-- **Commit format**: `type(scope): description (#N)`
-- **PR body**: Include `Closes #N` for auto-linking and auto-close
-- **Labels**: `status:in-progress`, `terminal`, feature labels
-
----
-
-## 11. Architectural Decisions
-
-### ADR-001: Nested src-layout for Package Structure
-
-**Decision**: Use `src/dashtam_terminal/` (nested src-layout) instead of flat `src/` layout.
-**Status**: Accepted
-**Date**: 2026-01-19
-
-**Context**:
-The Dashtam API project uses a flat `src/` layout (modules directly in `src/`). Initially, we considered aligning the terminal project with this structure for consistency.
-
-**Problem**:
-The terminal project requires installable entry points (`dashtam`, `dashtam-cli` commands) defined in `[project.scripts]`. This requires the project to be an installable Python package with proper package discovery.
-
-**Key Findings**:
-
-- `uv_build` backend expects `src/<package_name>/__init__.py` by default
-- The API project has NO `[build-system]` or `[project.scripts]` — it runs directly via `uvicorn src.main:app` without being installed as a package
-- Flat `src/` layout with entry points requires either:
-  - Complex `uv_build` configuration (limited flexibility)
-  - Switching to `hatchling` backend (adds complexity)
-  - Removing entry points (poor UX for CLI app)
-
-**Decision Rationale**:
-
-1. **Entry points are essential** for TUI/CLI apps (`dashtam`, `dashtam-cli`)
-2. **uv_build works seamlessly** with nested `src/dashtam_terminal/` layout
-3. **Consistency with uv ecosystem** — keep using uv for everything
-4. **Different use cases** — API is a server (runs from source), Terminal is an installable CLI app
+```toml
+[project.scripts]
+dashtam = "dashtam_terminal.ui.cli.main:app"
+dashtam-tui = "dashtam_terminal.ui.tui.main:run"
+```
 
 **Consequences**:
-
 - Terminal uses `src/dashtam_terminal/` structure
 - API uses flat `src/` structure
-- This is intentional — the projects have different packaging requirements
-- Imports use `from dashtam_terminal import ...` (not `from src import ...`)
+- This is intentional — different packaging requirements
+- Imports use `from dashtam_terminal import ...`
 
 **Alternatives Considered**:
-
-- `hatchling` backend: More flexible but adds complexity, different from uv ecosystem
-- Remove entry points: Poor UX, users would need `python -m` commands
+- `hatchling` backend: More flexible but adds complexity
+- Remove entry points: Poor UX
 - Flat src with uv_build config: Limited support, fragile
 
 ---
 
-**Last Updated**: 2026-01-19
+**Last Updated**: 2026-01-21
